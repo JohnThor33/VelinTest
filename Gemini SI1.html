@@ -1,0 +1,1554 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<title>Space Shooter Ultimate</title>
+<style>
+  /* Basic Reset and Body Styling */
+  * {
+    box-sizing: border-box;
+    margin: 0; padding: 0;
+  }
+  html, body {
+    height: 100%;
+    overflow: hidden; /* Prevent scrolling */
+  }
+  body {
+    font-family: 'Arial Black', sans-serif;
+    background: #000;
+    color: white;
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    touch-action: none; /* Disable default touch actions like pan and zoom */
+  }
+
+  /* Game Header */
+  #game-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 10px;
+    background: #222;
+    border-bottom: 2px solid #444;
+    position: relative; /* Needed for z-index */
+    z-index: 100; /* Ensure header is above canvas */
+  }
+  .hp-container, .score-container {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 18px; /* Slightly larger font for readability */
+  }
+  .hp-bar {
+    width: 140px;
+    height: 20px;
+    background: #333;
+    border: 2px solid #555;
+    border-radius: 5px;
+    overflow: hidden;
+  }
+  .hp-fill {
+    height: 100%;
+    background: linear-gradient(to right, #f00, #0f0); /* Red to Green gradient */
+    transition: width 0.3s ease; /* Smooth transition for HP changes */
+    width: 100%; /* Default to full HP */
+  }
+  .boss-hp-fill {
+    height: 100%;
+    background: linear-gradient(to right, violet, purple); /* Violet to Purple gradient for Boss HP */
+    transition: width 0.3s ease;
+    width: 0%; /* Default to empty Boss HP */
+  }
+  .score {
+    font-size: 22px;
+    font-weight: bold;
+    color: #ff0; /* Bright yellow for score */
+    min-width: 110px; /* Ensure consistent width */
+    text-align: center;
+  }
+
+  /* Game Container and Canvas */
+  #game-container {
+    flex: 1; /* Allows canvas to take available vertical space */
+    position: relative;
+  }
+  canvas {
+    display: block;
+    background: #000; /* Black background for space */
+    width: 100%;
+    height: 100%;
+    image-rendering: crisp-edges; /* For pixel art if any, otherwise smoother */
+  }
+
+  /* Game Footer and Controls */
+  #game-footer {
+    background: #222;
+    padding: 10px 10px calc(10px + env(safe-area-inset-bottom)) 10px; /* Add safe area inset for modern devices */
+    border-top: 2px solid #444;
+    box-sizing: border-box;
+    position: relative;
+    z-index: 1000; /* Ensure footer is always on top */
+    /* Removed transform: translateY(-50%); as it was displacing the footer */
+  }
+  .controls {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    gap: 10px; /* Spacing between buttons */
+  }
+  .control-btn {
+    width: 50px; /* Slightly larger for better touch target */
+    height: 50px;
+    background: rgba(255, 255, 255, 0.2);
+    border-radius: 50%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-size: 20px; /* Larger font for arrows */
+    font-weight: bold;
+    user-select: none; /* Prevent text selection */
+    touch-action: manipulation; /* Allow touch to directly affect target */
+    border: 2px solid #888;
+    color: white;
+    box-shadow: 0 0 10px rgba(0,0,0,0.5); /* Subtle shadow */
+    transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+  .control-btn:active {
+    background: rgba(255, 255, 255, 0.4);
+    box-shadow: 0 0 15px rgba(255,255,255,0.7);
+  }
+  #fire-btn {
+    background: rgba(255, 50, 50, 0.5); /* Reddish for fire button */
+    border-color: #f00;
+  }
+  #fire-btn:active {
+    background: rgba(255, 50, 50, 0.7);
+    box-shadow: 0 0 15px rgba(255,50,50,0.9);
+  }
+  #rocket-btn img, #beam-btn img {
+    width: 80%; /* Smaller image inside button */
+    height: 80%;
+    object-fit: contain;
+    pointer-events: none; /* Prevent image from intercepting touch events */
+  }
+  #beam-btn {
+    display: none; /* Hidden by default */
+    background: rgba(0, 119, 255, 0.5); /* Blueish for beam */
+    border-color: #0073e6;
+    animation: pulse 1s infinite alternate; /* Pulsing animation for beam button */
+  }
+  @keyframes pulse {
+    from { box-shadow: 0 0 5px #fff, 0 0 10px #fff, 0 0 15px #0073e6, 0 0 20px #0073e6; }
+    to { box-shadow: 0 0 10px #fff, 0 0 20px #fff, 0 0 30px #0073e6, 0 0 40px #0073e6; }
+  }
+  .control-btn.disabled {
+    opacity: 0.5;
+    pointer-events: none; /* Disable interaction */
+    cursor: not-allowed;
+    border-color: #555;
+    box-shadow: none;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* Custom Modal for Game Over / Victory */
+  .modal-overlay {
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 2000; /* Above all other game elements */
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.3s ease, visibility 0.3s ease;
+  }
+  .modal-overlay.active {
+    opacity: 1;
+    visibility: visible;
+  }
+  .modal-content {
+    background: linear-gradient(45deg, #1a1a1a, #333333);
+    padding: 30px;
+    border-radius: 15px;
+    text-align: center;
+    box-shadow: 0 0 30px rgba(0, 255, 255, 0.7);
+    max-width: 90%;
+    transform: scale(0.9);
+    transition: transform 0.3s ease;
+  }
+  .modal-overlay.active .modal-content {
+    transform: scale(1);
+  }
+  .modal-title {
+    font-size: 2.5em;
+    color: #00ffff; /* Cyan for titles */
+    margin-bottom: 20px;
+    text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff;
+  }
+  .modal-score {
+    font-size: 1.8em;
+    color: #ffcc00; /* Gold for score */
+    margin-bottom: 30px;
+  }
+  .modal-button {
+    background: linear-gradient(90deg, #007bff, #00c4ff);
+    color: white;
+    padding: 15px 30px;
+    border: none;
+    border-radius: 10px;
+    font-size: 1.2em;
+    cursor: pointer;
+    transition: background 0.3s ease, transform 0.1s ease;
+    box-shadow: 0 5px 15px rgba(0, 196, 255, 0.4);
+  }
+  .modal-button:active {
+    transform: translateY(2px);
+    box-shadow: 0 2px 10px rgba(0, 196, 255, 0.6);
+  }
+  .lightning-beam {
+    position: fixed; /* Penting agar beam bisa bergerak di luar alur dokumen */
+    width: 100vw; /* Lebar beam sepanjang viewport */
+    height: 50px; /* Tinggi beam, sesuaikan */
+    background: linear-gradient(to right,
+                rgba(255, 255, 0, 0.8) 0%,   /* Kuning menyala */
+                rgba(255, 255, 0, 0.5) 50%,
+                rgba(255, 255, 0, 0.0) 100%  /* Transparan di ujung */
+            );
+    /* Untuk efek lebih 'listrik', bisa pakai background-image dengan pola atau filter */
+    box-shadow: 0 0 20px 5px rgba(255, 255, 0, 0.8); /* Efek glow */
+    z-index: 9999; /* Pastikan beam muncul di atas elemen lain */
+    pointer-events: none; /* Penting agar beam tidak menghalangi interaksi mouse/touch */
+    /* Animasi akan ditambahkan via JavaScript dengan properti `transition` */
+}
+
+</style>
+</head>
+<body>
+
+<header id="game-header">
+  <div class="hp-container">
+    <div>HP Hero:</div>
+    <div class="hp-bar"><div id="hp-fill" class="hp-fill"></div></div>
+  </div>
+
+  <div class="score-container">
+    SCORE: <span id="score" class="score">0</span>
+  </div>
+
+  <div class="hp-container">
+    <div>HP Bos:</div>
+    <div class="hp-bar"><div id="boss-hp-fill" class="boss-hp-fill"></div></div>
+  </div>
+</header>
+
+<main id="game-container">
+  <canvas id="gameCanvas"></canvas>
+</main>
+
+<footer id="game-footer">
+  <div class="controls">
+    <div id="up-btn" class="control-btn">↑</div>
+    <div id="down-btn" class="control-btn">↓</div>
+    <div id="fire-btn" class="control-btn">FIRE</div>
+    <div id="rocket-btn" class="control-btn" style="display:none;">
+      <img src="https://johnthor33.github.io/VelinTest/Roket.png" alt="Rocket" />
+    </div>
+    <div id="beam-btn" class="control-btn">
+      <img src="https://johnthor33.github.io/VelinTest/HeroBeam.png" alt="Beam" />
+    </div>
+  </div>
+</footer>
+
+<div id="game-modal-overlay" class="modal-overlay">
+  <div class="modal-content">
+    <h2 id="modal-title" class="modal-title"></h2>
+    <p id="modal-score" class="modal-score"></p>
+    <button id="modal-restart-btn" class="modal-button">Main Lagi</button>
+  </div>
+</div>
+
+<script>
+  // Game Canvas Setup
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const hpFill = document.getElementById('hp-fill');
+  const bossHpFill = document.getElementById('boss-hp-fill');
+  const scoreDisplay = document.getElementById('score');
+  const rocketBtn = document.getElementById('rocket-btn');
+  const beamBtn = document.getElementById('beam-btn');
+  const fireBtn = document.getElementById('fire-btn');
+
+  // Modal Elements
+  const gameModalOverlay = document.getElementById('game-modal-overlay');
+  const modalTitle = document.getElementById('modal-title');
+  const modalScore = document.getElementById('modal-score');
+  const modalRestartBtn = document.getElementById('modal-restart-btn');
+
+  // Load Assets
+  const assets = {
+    hero: new Image(),
+    boss1: new Image(),
+    boss2: new Image(),
+    enemy: new Image(),
+    rocket: new Image(),
+    beam: new Image(),
+    bg: new Image(),
+    explosions: [
+      new Image(), new Image(),
+      new Image(),
+    ]
+  };
+
+  assets.hero.src = 'https://johnthor33.github.io/VelinTest/Alifah.png';
+  assets.boss1.src = 'https://johnthor33.github.io/VelinTest/Bos11.png';
+  assets.boss2.src = 'https://johnthor33.github.io/VelinTest/Bos22.png';
+  assets.enemy.src = 'https://johnthor33.github.io/VelinTest/Alien.png';
+  assets.rocket.src = 'https://johnthor33.github.io/VelinTest/Roket.png';
+  assets.beam.src = 'https://johnthor33.github.io/VelinTest/HeroBeam.png';
+  assets.bg.src = 'https://johnthor33.github.io/VelinTest/Spaceouter.png';
+  assets.explosions.forEach((img, i) => {
+    img.src = `https://johnthor33.github.io/VelinTest/ledakan${i+1}.png`;
+  });
+
+  // Audio Setup
+  const audio = {
+    heroShot: new Audio('https://johnthor33.github.io/VelinTest/heroshot.mp3'),
+    miniExplosion: new Audio('https://johnthor33.github.io/VelinTest/miniexplosion.mp3'),
+    rocketShot: new Audio('https://johnthor33.github.io/VelinTest/rocket2.mp3'),
+    finalExplosion: new Audio('https://johnthor33.github.io/VelinTest/finalexplosion.mp3'),
+    victory: new Audio('https://johnthor33.github.io/VelinTest/final.mp3'),
+    danger: new Audio('https://johnthor33.github.io/VelinTest/Danger.mp3')
+  };
+
+  // Preload audio and set volume
+  for (const key in audio) {
+    if (audio.hasOwnProperty(key)) {
+      audio[key].load(); // Attempt to load audio
+      audio[key].volume = 0.5; // Set a default volume
+    }
+  }
+
+  // Event listener for final boss explosion to trigger victory music
+  // This prevents multiple victory music plays if called directly in game loop
+  audio.finalExplosion.addEventListener('ended', () => {
+    audio.victory.currentTime = 0; // Reset victory music
+    audio.victory.play();
+  });
+
+// --- Konfigurasi ---
+const heroId = 'hero'; // ID dari elemen Hero Anda
+const triggerDuration = 3; // Detik Hero harus berada di pojok
+const beamAnimationDuration = 0.5; // Durasi animasi beam (detik) - harus cepat!
+const audioPath = 'https://johnthor33.github.io/VelinTest/pikachu.mp3';
+const audioTriggerTime = 2; // Detik ke-2 audio mulai, beam muncul
+
+// --- Variabel Internal (Jangan Diubah) ---
+let heroElement;
+let currentAudio; // Untuk menyimpan instance audio
+let audioStartedTime = 0; // Waktu ketika audio mulai diputar
+let audioTimeoutId = null; // ID untuk setTimeout beam
+let topCornerTimer = 0;
+let bottomCornerTimer = 0;
+let isBeamActive = false; // Flag untuk mencegah beam bertumpuk
+let isAudioPlaying = false; // Flag untuk mencegah audio bertumpuk
+
+// --- Inisialisasi Saat Dokumen Siap ---
+document.addEventListener('DOMContentLoaded', () => {
+    heroElement = document.getElementById(heroId);
+    if (!heroElement) {
+        console.error(`Elemen Hero dengan ID '${heroId}' tidak ditemukan! Pastikan ID-nya benar.`);
+        return;
+    }
+
+    // Memulai loop game/update posisi
+    requestAnimationFrame(gameLoop);
+});
+
+// --- Game Loop (Dipanggil Setiap Frame) ---
+function gameLoop(currentTime) {
+    if (heroElement) {
+        checkHeroPosition();
+    }
+    requestAnimationFrame(gameLoop); // Lanjutkan loop
+}
+
+// --- Cek Posisi Hero ---
+function checkHeroPosition() {
+    const heroRect = heroElement.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+
+    // Batas pojok (misalnya 10% dari tinggi viewport dari atas/bawah)
+    const topThreshold = viewportHeight * 0.1;
+    const bottomThreshold = viewportHeight - (viewportHeight * 0.1);
+
+    // Cek di pojok atas
+    if (heroRect.top <= topThreshold) {
+        topCornerTimer += 1 / 60; // Asumsi 60 FPS, sesuaikan jika Anda punya deltaTime
+        bottomCornerTimer = 0; // Reset timer pojok bawah
+
+        if (topCornerTimer >= triggerDuration && !isBeamActive && !isAudioPlaying) {
+            triggerLightningBeam();
+        }
+    }
+    // Cek di pojok bawah
+    else if (heroRect.bottom >= bottomThreshold) {
+        bottomCornerTimer += 1 / 60; // Asumsi 60 FPS
+        topCornerTimer = 0; // Reset timer pojok atas
+
+        if (bottomCornerTimer >= triggerDuration && !isBeamActive && !isAudioPlaying) {
+            triggerLightningBeam();
+        }
+    }
+    // Hero tidak di pojok
+    else {
+        topCornerTimer = 0;
+        bottomCornerTimer = 0;
+        // Opsional: Hentikan audio jika Hero bergerak sebelum beam muncul
+        if (isAudioPlaying && !isBeamActive && audioTimeoutId) {
+            clearTimeout(audioTimeoutId);
+            if (currentAudio) {
+                currentAudio.pause();
+                currentAudio.currentTime = 0;
+            }
+            isAudioPlaying = false;
+            console.log("Hero bergerak, audio dan beam dibatalkan.");
+        }
+    }
+}
+
+// --- Pemicu Kilatan Beam ---
+function triggerLightningBeam() {
+    isAudioPlaying = true;
+    currentAudio = new Audio(audioPath);
+    currentAudio.volume = 0.7; // Sesuaikan volume
+    currentAudio.play().catch(e => console.error("Gagal memutar audio:", e));
+
+    audioStartedTime = performance.now(); // Catat waktu audio mulai diputar
+
+    console.log("Audio mulai diputar. Menunggu 2 detik untuk beam...");
+
+    // Set timeout untuk memunculkan beam setelah 2 detik audio
+    audioTimeoutId = setTimeout(() => {
+        if (isAudioPlaying) { // Pastikan audio masih dalam kondisi "playing" secara konseptual
+            spawnBeam();
+        }
+        isAudioPlaying = false; // Reset flag audio setelah beam muncul atau timeout berakhir
+    }, audioTriggerTime * 1000); // Konversi detik ke milidetik
+}
+
+// --- Fungsi untuk Memunculkan Beam ---
+function spawnBeam() {
+    if (isBeamActive) return; // Jangan memunculkan beam jika sudah ada yang aktif
+
+    isBeamActive = true;
+    console.log("Beam muncul!");
+
+    const beam = document.createElement('div');
+    beam.className = 'lightning-beam'; // Tambahkan kelas CSS untuk styling dan animasi
+    document.body.appendChild(beam); // Tambahkan ke body atau container game Anda
+
+    // Atur posisi awal beam (di luar layar kanan)
+    beam.style.right = '-100vw'; // Pastikan di luar viewport
+    beam.style.top = `${Math.random() * (window.innerHeight - 50)}px`; // Posisi Y acak dalam viewport
+
+    // Picu animasi setelah elemen ditambahkan ke DOM
+    // Menggunakan requestAnimationFrame untuk memastikan reflow terjadi sebelum animasi
+    requestAnimationFrame(() => {
+        beam.style.transition = `transform ${beamAnimationDuration}s linear`;
+        beam.style.transform = 'translateX(-100vw)'; // Gerakkan dari kanan ke kiri
+    });
+
+    // Hapus beam setelah animasi selesai
+    setTimeout(() => {
+        if (beam.parentNode) {
+            beam.parentNode.removeChild(beam);
+        }
+        isBeamActive = false; // Reset flag beam
+        console.log("Beam selesai.");
+    }, beamAnimationDuration * 1000);
+}
+
+// --- Opsional: Berikan Damage/Efek ke Hero (Ini perlu diintegrasikan dengan logika game Anda) ---
+function applyDamageToHero() {
+    // Logika untuk mengurangi HP Hero atau memberikan efek lain
+    console.log("Hero terkena dampak beam!");
+    // Contoh: heroElement.style.border = '2px solid red'; // Visual damage sementara
+    // Anda perlu mengelola HP Hero di sistem game Anda.
+}
+
+// Catatan: Jika Anda menggunakan deltaTime dari game loop yang sebenarnya, ganti `1 / 60`
+// pada `topCornerTimer` dan `bottomCornerTimer` dengan nilai `deltaTime` Anda.
+// Misalnya: `topCornerTimer += deltaTime;`
+
+  // Game State
+  const gameState = {
+    player: {
+      x: 50, y: 0, width: 65, height: 50,
+      speed: 5, hp: 1000, img: assets.hero,
+      exploding: false
+    },
+    bullets: [],
+    rockets: [],
+    beams: [],
+    enemies: [],
+    enemyBullets: [],
+    boss: null,
+    score: 0,
+    lastEnemySpawn: 0,
+    enemySpawnInterval: 2000,
+    keys: { up: false, down: false, fire: false },
+    lastFire: 0,
+    fireRate: 300,
+    lastRocketFire: 0,
+    rocketFireRate: 3000,
+    lastBeamFire: 0,
+    beamFireRate: 5000,
+    isScreenFlashing: false,
+    screenFlashStartTime: 0,
+    screenFlashDuration: 5000,
+    screenFlashBlinkInterval: 150,
+    currentScreenFlashBlinkState: false,
+    explosions: [],
+    debris: [], // Renamed from debris in BossExplosion to global debris for separate rendering
+    isVictory: false,
+    heroExitSpeed: 8,
+    victoryText: {
+      alpha: 0,
+      blinkDirection: 0.02,
+      text: "Hey Pro Velin, You Win!",
+      x: 0,
+      y: 0
+    },
+    bgX: 0,
+    bgSpeed: 2,
+    gameRunning: true, // Control game loop execution
+    bossDefeated: false, // NEW: Flag to ensure boss doesn't respawn
+    victoryTextActive: false // NEW: Flag to control victory text phase after explosion
+  };
+
+  // Game Classes
+  class Bullet {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.width = 15;
+      this.height = 5;
+      this.speed = 10;
+      this.color = '#f1c40f'; // Yellow
+    }
+    update() { this.x += this.speed; }
+    draw() {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.fillStyle = '#ff9900'; // Orange tail
+      ctx.fillRect(this.x + this.width - 3, this.y, 3, this.height);
+    }
+  }
+
+  class Rocket {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.width = 65;
+      this.height = 50;
+      this.speed = 7;
+    }
+    update() { this.x += this.speed; }
+    draw() {
+      // Draw rocket image if loaded, otherwise a placeholder rectangle
+      if (assets.rocket.complete) {
+        ctx.drawImage(assets.rocket, this.x, this.y, this.width, this.height);
+      } else {
+        ctx.fillStyle = 'orange';
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+  }
+
+  class Beam {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.width = canvas.width - x; // Beam extends to the right edge
+      this.height = 30;
+      this.active = true;
+      this.startTime = performance.now();
+      this.duration = 500; // Beam active for 500ms
+    }
+    update() {
+      if (performance.now() - this.startTime > this.duration) {
+        this.active = false; // Deactivate beam after duration
+      }
+    }
+    draw() {
+      // Draw beam image with glowing effect
+      if (assets.beam.complete) {
+        ctx.globalAlpha = 0.7; // Semi-transparent base
+        ctx.drawImage(assets.beam, this.x, this.y - this.height/2, this.width, this.height);
+        ctx.globalAlpha = 1.0; // Restore alpha
+        ctx.shadowBlur = 20; // Glowing shadow
+        ctx.shadowColor = '#0077ff'; // Blue glow
+        ctx.drawImage(assets.beam, this.x, this.y - this.height/2, this.width, this.height);
+        ctx.shadowBlur = 0; // Reset shadow blur
+      } else {
+        ctx.fillStyle = 'rgba(0, 119, 255, 0.7)'; // Placeholder blue rectangle
+        ctx.fillRect(this.x, this.y - this.height/2, this.width, this.height);
+      }
+    }
+  }
+
+  class Enemy {
+    constructor() {
+      this.width = 50;
+      this.height = 53;
+      this.x = canvas.width; // Starts off-screen to the right
+      this.y = Math.random() * (canvas.height - this.height); // Random Y position
+      this.speed = 3;
+      this.lastFire = 0;
+      this.fireRate = 1000; // Fire every 1 second
+    }
+    update(timestamp) {
+      this.x -= this.speed; // Move left
+      if (timestamp - this.lastFire > this.fireRate) {
+        this.fire();
+        this.lastFire = timestamp;
+      }
+    }
+    fire() {
+      // Create a new enemy bullet
+      gameState.enemyBullets.push(new EnemyBullet(this.x, this.y + this.height / 2 - 3));
+    }
+    draw() {
+      // Draw enemy image or placeholder rectangle
+      if (assets.enemy.complete) {
+        ctx.drawImage(assets.enemy, this.x, this.y, this.width, this.height);
+      } else {
+        ctx.fillStyle = '#e74c3c'; // Red placeholder
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+    }
+  }
+
+  class EnemyBullet {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.width = 10;
+      this.height = 6;
+      this.speed = 7;
+      this.color = '#ff5555'; // Red bullet
+    }
+    update() { this.x -= this.speed; } // Move left
+    draw() {
+      ctx.fillStyle = this.color;
+      ctx.fillRect(this.x, this.y, this.width, this.height);
+      ctx.fillStyle = '#ff2222'; // Darker red head
+      ctx.fillRect(this.x, this.y, 4, this.height);
+    }
+  }
+
+  class Boss {
+    constructor() {
+      this.width = 80;
+      this.height = 116;
+      this.x = canvas.width - this.width - 10; // Position near right edge
+      this.y = Math.random() * (canvas.height - this.height); // Random initial Y
+      this.speedY = 3 + Math.random() * 2; // Vertical movement speed
+      this.moveDirection = Math.random() < 0.5 ? 1 : -1; // Initial direction (down/up)
+      this.lastFire = 0;
+      this.fireRate = 800; // Boss fires every 0.8 seconds
+      this.bulletsFired = 0; // Counter for special attacks
+      this.isLaserActive = false;
+      this.laserStartTime = 0;
+      this.laserDuration = 700; // Laser lasts 0.7 seconds
+      this.laserCooldown = 1000; // Cooldown after laser
+      this.isLaserCooldown = false;
+      this.hp = 500;
+      this.maxHp = 500;
+      this.isTransformed = false;
+      this.img = assets.boss1; // Initial boss image
+      this.transformInitiated = false;
+      this.transformationDelay = 1500; // Delay before transformation animation ends
+      this.transformationTime = 0;
+      this.exploding = false; // Flag to prevent multiple explosion triggers
+      this.transformedSpeedMultiplier = 2.0; // Boss speed multiplier after transformation
+      this.baseSpeedMin = 3;
+      this.baseSpeedMax = 5;
+    }
+
+    update(timestamp) {
+      if (gameState.isScreenFlashing || gameState.bossDefeated) return; // Pause boss movement during screen flash or if defeated
+
+      // Initiate transformation sequence when HP is low
+      if (!this.transformInitiated && this.hp <= this.maxHp / 2) {
+        this.transformInitiated = true;
+        this.transformationTime = timestamp + this.transformationDelay;
+      }
+
+      // Perform transformation after delay
+      if (this.transformInitiated && !this.isTransformed && timestamp >= this.transformationTime) {
+        this.transform();
+      }
+
+      // Handle laser active state
+      if (this.isLaserActive) {
+        if (timestamp - this.laserStartTime > this.laserDuration) {
+          this.isLaserActive = false;
+          this.isLaserCooldown = true;
+          this.laserCooldownStart = timestamp;
+        }
+        return; // Don't move or fire normal bullets while laser is active
+      }
+
+      // Handle laser cooldown state
+      if (this.isLaserCooldown) {
+        if (timestamp - this.laserCooldownStart > this.laserCooldown) {
+          this.isLaserCooldown = false;
+        } else {
+          return; // Don't move or fire normal bullets during cooldown
+        }
+      }
+
+      // Vertical movement
+      this.y += this.speedY * this.moveDirection;
+
+      // Bounce off top and bottom edges
+      if (this.y <= 0) {
+        this.y = 0;
+        this.moveDirection = 1; // Move down
+        const baseSpeed = this.baseSpeedMin + Math.random() * (this.baseSpeedMax - this.baseSpeedMin);
+        this.speedY = baseSpeed * (this.isTransformed ? this.transformedSpeedMultiplier : 1);
+      } else if (this.y + this.height >= canvas.height) {
+        this.y = canvas.height - this.height;
+        this.moveDirection = -1; // Move up
+        const baseSpeed = this.baseSpeedMin + Math.random() * (this.baseSpeedMax - this.baseSpeedMin);
+        this.speedY = baseSpeed * (this.isTransformed ? this.transformedSpeedMultiplier : 1);
+      }
+
+      // Boss firing logic
+      if (timestamp - this.lastFire > this.fireRate) {
+        this.fire(timestamp);
+        this.lastFire = timestamp;
+      }
+    }
+
+    transform() {
+      if (!this.isTransformed) {
+        this.isTransformed = true;
+        this.img = assets.boss2; // Change boss image
+        this.speedY *= this.transformedSpeedMultiplier; // Increase speed
+        const maxAllowedSpeed = 10; // Cap max speed
+        if (this.speedY > maxAllowedSpeed) {
+          this.speedY = maxAllowedSpeed;
+        }
+        this.fireRate = 500; // Increase fire rate
+      }
+    }
+
+    fire(timestamp) {
+      this.bulletsFired++;
+      // Every 8th shot is a laser
+      if (this.bulletsFired % 8 === 0) {
+        this.isLaserActive = true;
+        this.laserStartTime = timestamp;
+      } else {
+        // Normal bullet
+        gameState.enemyBullets.push(new EnemyBullet(this.x, this.y + this.height / 2 - 3));
+      }
+    }
+
+    draw() {
+      // Draw boss image or placeholder
+      if (this.img.complete) {
+        ctx.drawImage(this.img, this.x, this.y, this.width, this.height);
+      } else {
+        ctx.fillStyle = '#800080'; // Purple placeholder
+        ctx.fillRect(this.x, this.y, this.width, this.height);
+      }
+
+      // Draw laser if active
+      if (this.isLaserActive) {
+        ctx.fillStyle = 'rgba(255, 105, 255, 0.7)'; // Pinkish transparent
+        // Laser extends from boss to the left edge of the canvas
+        ctx.fillRect(0, this.y + this.height / 3, this.x, this.height / 3);
+      }
+    }
+  }
+
+  class Explosion {
+    constructor(x, y, size) {
+      this.x = x;
+      this.y = y;
+      this.size = size;
+      this.frameIndex = 0;
+      this.frameSpeed = 5; // How many game loops per frame change
+      this.counter = 0;
+      this.finished = false;
+    }
+   update() {
+ this.counter++;
+      if (this.counter % this.frameSpeed === 0) {
+        this.frameIndex++;
+        if (this.frameIndex >= assets.explosions.length) {
+          this.finished = true; // Mark as finished when all frames played
+        }
+      }
+    }
+    draw() {
+      // Draw explosion frame if not finished and asset is loaded
+      if (!this.finished && assets.explosions[this.frameIndex] && assets.explosions[this.frameIndex].complete) {
+        ctx.drawImage(
+          assets.explosions[this.frameIndex],
+          this.x - this.size / 2, // Center the explosion
+          this.y - this.size / 2,
+          this.size,
+          this.size
+        );
+      }
+    }
+  }
+
+  class BossExplosion {
+    constructor(x, y) {
+      this.x = x;
+      this.y = y;
+      this.size = 200; // Larger size for boss explosion
+      this.frameIndex = 0;
+      this.frameSpeed = 3; // Faster animation
+      this.counter = 0;
+      this.startTime = performance.now();
+      this.duration = 23000; // Duration of the full boss explosion sequence (23 seconds as per user request)
+      this.speedX = -0.5; // Slowly drift left
+      this.speedY = 0.2; // Slowly drift down
+      this.debrisSpawned = false; // Flag to ensure debris is spawned once
+    }
+
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+
+      this.counter++;
+      if (this.counter % this.frameSpeed === 0) {
+        this.frameIndex = (this.frameIndex + 1) % assets.explosions.length; // Loop explosion frames
+      }
+
+      // Spawn debris once the initial explosion animation is complete
+      if (!this.debrisSpawned && performance.now() - this.startTime > 1000) { // Spawn debris shortly after explosion starts
+        this.spawnDebris();
+        this.debrisSpawned = true;
+      }
+    }
+
+    spawnDebris() {
+      const colors = ['#8A2BE2', '#9932CC', '#9400D3', '#4B0082']; // Purple shades
+      for (let i = 0; i < 20; i++) {
+        gameState.debris.push(new BossDebris(
+          this.x + (Math.random() - 0.5) * 100, // Spread debris around boss center
+          this.y + (Math.random() - 0.5) * 100,
+          colors[Math.floor(Math.random() * colors.length)]
+        ));
+      }
+    }
+
+    draw() {
+      if (!assets.explosions[this.frameIndex].complete) return;
+
+      // Draw main explosion with alpha
+      ctx.globalAlpha = 0.8;
+      ctx.drawImage(
+        assets.explosions[this.frameIndex],
+        this.x - this.size / 2,
+        this.y - this.size / 2,
+        this.size,
+        this.size
+      );
+      ctx.globalAlpha = 1.0;
+    }
+
+    isFinished() {
+      return performance.now() - this.startTime > this.duration;
+    }
+  }
+
+  class BossDebris {
+    constructor(x, y, color) {
+      this.x = x;
+      this.y = y;
+      this.size = Math.random() * 30 + 15; // Random size for debris
+      this.color = color;
+      this.speedX = (Math.random() - 0.5) * 8; // Random horizontal speed
+      this.speedY = (Math.random() - 0.5) * 8; // Random vertical speed
+      this.rotation = 0;
+      this.rotationSpeed = (Math.random() - 0.5) * 0.3; // Random rotation speed
+      this.gravity = 0.1; // Debris falls down
+      this.lifetime = 0;
+      this.maxLifetime = 3000; // Debris disappears after 3 seconds
+    }
+
+    update() {
+      this.x += this.speedX;
+      this.y += this.speedY;
+      this.speedY += this.gravity; // Apply gravity
+      this.rotation += this.rotationSpeed;
+      this.lifetime += 16; // Assuming 60 FPS, approx 16ms per frame
+    }
+
+    draw() {
+      ctx.save(); // Save current canvas state
+      ctx.translate(this.x, this.y); // Move origin to debris center
+      ctx.rotate(this.rotation); // Apply rotation
+      ctx.fillStyle = this.color;
+      ctx.fillRect(-this.size/2, -this.size/2, this.size, this.size); // Draw centered rectangle
+
+      ctx.strokeStyle = 'rgba(0,0,0,0.3)'; // Dark outline
+      ctx.lineWidth = 2;
+      ctx.strokeRect(-this.size/2, -this.size/2, this.size, this.size);
+      ctx.restore(); // Restore previous canvas state
+    }
+
+    isFinished() {
+      return this.lifetime >= this.maxLifetime;
+    }
+  }
+  
+  // Game Functions
+  function resizeCanvas() {
+    canvas.width = canvas.parentElement.clientWidth;
+    const headerHeight = document.getElementById('game-header').offsetHeight;
+    const footerHeight = document.getElementById('game-footer').offsetHeight;
+    canvas.height = window.innerHeight - headerHeight - footerHeight; // Adjusted to remove extra 20px
+    // Player position adjustment on resize
+    gameState.player.y = Math.min(canvas.height - gameState.player.height, Math.max(0, gameState.player.y));
+  }
+
+  function drawBackground() {
+    gameState.bgX -= gameState.bgSpeed; // Scroll background
+    if (gameState.bgX <= -canvas.width) gameState.bgX = 0; // Loop background
+    ctx.drawImage(assets.bg, gameState.bgX, 0, canvas.width, canvas.height);
+    ctx.drawImage(assets.bg, gameState.bgX + canvas.width, 0, canvas.width, canvas.height);
+  }
+
+  function drawPlayer() {
+    if (gameState.player.img.complete) {
+      ctx.drawImage(gameState.player.img, gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+    } else {
+      ctx.fillStyle = '#3498db'; // Blue placeholder
+      ctx.fillRect(gameState.player.x, gameState.player.y, gameState.player.width, gameState.player.height);
+    }
+  }
+
+  function createExplosion(x, y, isBoss = false) {
+    if (isBoss) {
+      gameState.explosions.push(new BossExplosion(x, y));
+      audio.finalExplosion.currentTime = 0;
+      audio.finalExplosion.play();
+    } else {
+      gameState.explosions.push(new Explosion(x, y, 40));
+      audio.miniExplosion.currentTime = 0;
+      audio.miniExplosion.play();
+    }
+  }
+
+  function checkCollision(a, b) {
+    // Axis-Aligned Bounding Box (AABB) collision detection
+    return a.x < b.x + b.width &&
+           a.x + a.width > b.x &&
+           a.y < b.y + b.height &&
+           a.y + b.height > b.y; // Fixed minor bug here: a.y + a.height > b.y
+  }
+
+  function fireRocket() {
+    const now = performance.now();
+    // Check fire rate and if button is not disabled
+    if (now - gameState.lastRocketFire > gameState.rocketFireRate && !rocketBtn.classList.contains('disabled')) {
+      gameState.rockets.push(new Rocket(
+        gameState.player.x + gameState.player.width,
+        gameState.player.y + gameState.player.height / 2 - gameState.player.height / 2 // Center rocket vertically
+      ));
+      gameState.lastRocketFire = now;
+      audio.rocketShot.currentTime = 0;
+      audio.rocketShot.play();
+    }
+  }
+
+  function fireBeam() {
+    const now = performance.now();
+    // Beam can only be fired if boss exists and its HP is below 30%
+    if (now - gameState.lastBeamFire > gameState.beamFireRate && gameState.boss && gameState.boss.hp < gameState.boss.maxHp * 0.3) {
+      gameState.beams.push(new Beam(
+        gameState.player.x + gameState.player.width,
+        gameState.player.y + gameState.player.height / 2
+      ));
+      gameState.lastBeamFire = now;
+      // Use heroShot for beam as per original code, or a dedicated beam sound
+      audio.heroShot.currentTime = 0;
+      audio.heroShot.play();
+    }
+  }
+
+  function updateButtonVisibility() {
+    // Buttons should be hidden if boss is defeated or game is in victory sequence
+    if (gameState.bossDefeated || gameState.isVictory) {
+      rocketBtn.style.display = 'none';
+      beamBtn.style.display = 'none';
+      fireBtn.classList.add('disabled'); // Disable normal fire
+      return;
+    }
+
+    if (gameState.boss) {
+      rocketBtn.style.display = 'flex'; // Show rocket button when boss appears
+
+      // Special conditions for beam button
+      if (gameState.boss.hp < gameState.boss.maxHp * 0.3) {
+        beamBtn.style.display = 'flex'; // Show beam button
+        fireBtn.classList.add('disabled'); // Disable normal fire
+        rocketBtn.classList.add('disabled'); // Disable rocket fire
+      } else {
+        beamBtn.style.display = 'none'; // Hide beam button
+        fireBtn.classList.remove('disabled'); // Enable normal fire
+        rocketBtn.classList.remove('disabled'); // Enable rocket fire
+      }
+    } else {
+      rocketBtn.style.display = 'none'; // Hide rocket button if no boss
+      beamBtn.style.display = 'none'; // Hide beam button if no boss
+      fireBtn.classList.remove('disabled'); // Ensure fire button is enabled
+      rocketBtn.classList.remove('disabled'); // Ensure rocket button is enabled
+    }
+  }
+
+  function spawnEnemy(timestamp) {
+    // Spawn enemies only if no screen flash, no boss, score below 150, and boss not defeated
+    if (!gameState.isScreenFlashing && !gameState.boss && gameState.score < 150 && !gameState.bossDefeated) {
+      if (timestamp - gameState.lastEnemySpawn > gameState.enemySpawnInterval) {
+        gameState.enemies.push(new Enemy());
+        gameState.lastEnemySpawn = timestamp;
+
+        // Decrease spawn interval as score increases for more difficulty
+        if (gameState.score > 0 && gameState.score % 5 === 0) {
+          gameState.enemySpawnInterval = Math.max(500, gameState.enemySpawnInterval - 100);
+        }
+      }
+    }
+  }
+
+  /**
+   * Displays the game over or victory modal.
+   * @param {string} title - The title text for the modal (e.g., "GAME OVER", "VICTORY!").
+   * @param {number} score - The final score to display.
+   */
+  function showGameModal(title, score) {
+    modalTitle.textContent = title;
+    modalScore.textContent = `Skor Akhir: ${score}`;
+    gameModalOverlay.classList.add('active'); // Show the modal
+    gameState.gameRunning = false; // Stop the game loop
+  }
+
+  /**
+   * Hides the game modal.
+   */
+  function hideGameModal() {
+    gameModalOverlay.classList.remove('active');
+  }
+
+  // Game Loop
+  function gameLoop(timestamp) {
+    if (!gameState.gameRunning) {
+      // If game is not running, only draw current state and wait for restart
+      drawBackground();
+      // Only draw player during victory text phase or if game over explosion is active
+      if (gameState.isVictory && !gameModalOverlay.classList.contains('active')) { // Player exiting during victory phase
+         drawPlayer();
+      } else if (gameState.player.exploding && gameState.player.hp <= 0) { // Player exploding during game over
+         drawPlayer();
+      }
+      
+      // Draw existing explosions and debris if game ended during them
+      gameState.explosions.forEach(exp => exp.draw());
+      gameState.debris.forEach(deb => deb.draw());
+
+      // If victory text is active, draw it
+      if (gameState.victoryTextActive) {
+        ctx.font = 'bold 36px "Arial Black", sans-serif';
+        ctx.fillStyle = `rgba(255,105,180,${gameState.victoryText.alpha})`; // Pinkish color
+        ctx.textAlign = 'center';
+        ctx.shadowColor = 'rgba(255,105,180,0.7)';
+        ctx.shadowBlur = 20;
+        ctx.fillText(gameState.victoryText.text, canvas.width/2, canvas.height/2);
+
+        ctx.strokeStyle = 'white';
+        ctx.lineWidth = 3;
+        ctx.strokeText(gameState.victoryText.text, canvas.width/2, canvas.height/2);
+        ctx.shadowBlur = 0;
+      }
+
+      requestAnimationFrame(gameLoop);
+      return;
+    }
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height); // Clear canvas each frame
+
+    drawBackground();
+
+    // Player Movement
+    // Player cannot move during screen flash, or if victory text is active (meaning player is exiting)
+    if (!gameState.isScreenFlashing && !gameState.victoryTextActive) {
+      if (gameState.keys.up) {
+        gameState.player.y = Math.max(0, gameState.player.y - gameState.player.speed);
+      }
+      if (gameState.keys.down) {
+        gameState.player.y = Math.min(canvas.height - gameState.player.height, gameState.player.y + gameState.player.speed);
+      }
+    }
+
+    // Player Shooting (Normal Bullet)
+    // Player cannot shoot during screen flash or if victory text is active
+    if (!gameState.isScreenFlashing && !gameState.victoryTextActive && gameState.keys.fire && !fireBtn.classList.contains('disabled') && timestamp - gameState.lastFire > gameState.fireRate) {
+      gameState.bullets.push(new Bullet(
+        gameState.player.x + gameState.player.width,
+        gameState.player.y + gameState.player.height / 2 - 2.5
+      ));
+      gameState.lastFire = timestamp;
+      audio.heroShot.currentTime = 0;
+      audio.heroShot.play();
+    }
+
+    // Enemy Spawning
+    spawnEnemy(timestamp);
+
+    // Boss Spawning
+    if (!gameState.boss && gameState.score >= 150 && !gameState.bossDefeated) { // Added bossDefeated check
+      gameState.boss = new Boss();
+      gameState.enemies = []; // Clear existing enemies when boss appears
+    }
+
+    // Beam Updates (Player special attack)
+    for (let i = gameState.beams.length - 1; i >= 0; i--) {
+      const beam = gameState.beams[i];
+      beam.update();
+      beam.draw();
+
+      if (!beam.active) {
+        gameState.beams.splice(i, 1);
+        continue;
+      }
+
+      if (gameState.boss && checkCollision(beam, gameState.boss)) {
+        // Apply continuous damage while beam is active and hitting boss
+        gameState.boss.hp -= 5;
+        // Check for boss defeat
+        if (gameState.boss.hp <= 0 && !gameState.boss.exploding) {
+          createExplosion(
+            gameState.boss.x + gameState.boss.width / 2,
+            gameState.boss.y + gameState.boss.height / 2,
+            true // Is boss explosion
+          );
+          gameState.boss.exploding = true;
+          gameState.bossDefeated = true; // NEW: Set boss defeated flag
+          gameState.boss = null; // Remove boss from game
+          gameState.score += 100;
+          scoreDisplay.textContent = gameState.score;
+
+          // NEW: Trigger victory sequence after explosion and text display
+          setTimeout(() => { // Wait for boss explosion (23 seconds)
+              gameState.isVictory = true; // Trigger player exit animation
+              gameState.victoryTextActive = true; // Start showing the victory text
+              // Set a timeout for the victory text duration (4 seconds)
+              setTimeout(() => {
+                  showGameModal("VICTORY!", gameState.score); // Show the final modal
+              }, 4000); // 4 seconds for the victory text
+          }, 23000); // Wait for boss explosion (23 seconds)
+        }
+      }
+    }
+
+    // Bullet Updates (Player normal shot)
+    for (let i = gameState.bullets.length - 1; i >= 0; i--) {
+      const bullet = gameState.bullets[i];
+      bullet.update();
+      bullet.draw();
+
+      if (bullet.x > canvas.width) { // Remove if off-screen
+        gameState.bullets.splice(i, 1);
+        continue;
+      }
+
+      // Collision with enemies
+      for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+        const enemy = gameState.enemies[j];
+        if (checkCollision(bullet, enemy)) {
+          gameState.bullets.splice(i, 1); // Remove bullet
+          gameState.enemies.splice(j, 1); // Remove enemy
+          gameState.score += 10;
+          scoreDisplay.textContent = gameState.score;
+          createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+          break; // Stop checking further collisions for this bullet
+        }
+      }
+
+      // Collision with boss
+      if (gameState.boss && checkCollision(bullet, gameState.boss)) {
+        gameState.bullets.splice(i, 1);
+        gameState.boss.hp -= 10;
+        if (gameState.boss.hp <= 0 && !gameState.boss.exploding) {
+          createExplosion(
+            gameState.boss.x + gameState.boss.width / 2,
+            gameState.boss.y + gameState.boss.height / 2,
+            true
+          );
+          gameState.boss.exploding = true;
+          gameState.bossDefeated = true; // NEW: Set boss defeated flag
+          gameState.boss = null;
+          gameState.score += 100;
+          scoreDisplay.textContent = gameState.score;
+
+          // NEW: Trigger victory sequence after explosion and text display
+          setTimeout(() => { // Wait for boss explosion (23 seconds)
+              gameState.isVictory = true; // Trigger player exit animation
+              gameState.victoryTextActive = true; // Start showing the victory text
+              // Set a timeout for the victory text duration (4 seconds)
+              setTimeout(() => {
+                  showGameModal("VICTORY!", gameState.score); // Show the final modal
+              }, 4000); // 4 seconds for the victory text
+          }, 23000); // Wait for boss explosion (23 seconds)
+        }
+      }
+    }
+
+    // Rocket Updates (Player special weapon)
+    for (let i = gameState.rockets.length - 1; i >= 0; i--) {
+      const rocket = gameState.rockets[i];
+      rocket.update();
+      rocket.draw();
+
+      if (rocket.x > canvas.width) {
+        gameState.rockets.splice(i, 1);
+        continue;
+      }
+
+      // Collision with enemies
+      for (let j = gameState.enemies.length - 1; j >= 0; j--) {
+        const enemy = gameState.enemies[j];
+        if (checkCollision(rocket, enemy)) {
+          gameState.rockets.splice(i, 1);
+          gameState.enemies.splice(j, 1);
+          gameState.score += 20;
+          scoreDisplay.textContent = gameState.score;
+          createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+          break;
+        }
+      }
+
+      // Collision with boss
+      if (gameState.boss && checkCollision(rocket, gameState.boss)) {
+        gameState.rockets.splice(i, 1);
+        gameState.boss.hp -= 30;
+        if (gameState.boss.hp <= 0 && !gameState.boss.exploding) {
+          createExplosion(
+            gameState.boss.x + gameState.boss.width / 2,
+            gameState.boss.y + gameState.boss.height / 2,
+            true
+          );
+          gameState.boss.exploding = true;
+          gameState.bossDefeated = true; // NEW: Set boss defeated flag
+          gameState.boss = null;
+          gameState.score += 100;
+          scoreDisplay.textContent = gameState.score;
+
+          // NEW: Trigger victory sequence after explosion and text display
+          setTimeout(() => { // Wait for boss explosion (23 seconds)
+              gameState.isVictory = true; // Trigger player exit animation
+              gameState.victoryTextActive = true; // Start showing the victory text
+              // Set a timeout for the victory text duration (4 seconds)
+              setTimeout(() => {
+                  showGameModal("VICTORY!", gameState.score); // Show the final modal
+              }, 4000); // 4 seconds for the victory text
+          }, 23000); // Wait for boss explosion (23 seconds)
+        }
+      }
+    }
+
+    // Enemy Updates
+    for (let i = gameState.enemies.length - 1; i >= 0; i--) {
+      const enemy = gameState.enemies[i];
+      enemy.update(timestamp);
+      enemy.draw();
+
+      if (enemy.x + enemy.width < 0) { // Remove if off-screen
+        gameState.enemies.splice(i, 1);
+        continue;
+      }
+
+      // Collision with player
+      if (checkCollision(enemy, gameState.player)) {
+        gameState.enemies.splice(i, 1);
+        gameState.player.hp -= 100; // Player takes damage
+        hpFill.style.width = `${(gameState.player.hp / 1000) * 100}%`;
+        createExplosion(enemy.x + enemy.width / 2, enemy.y + enemy.height / 2);
+      }
+    }
+
+    // Enemy Bullet Updates
+    for (let i = gameState.enemyBullets.length - 1; i >= 0; i--) {
+      const bullet = gameState.enemyBullets[i];
+      bullet.update();
+      bullet.draw();
+
+      if (bullet.x + bullet.width < 0) { // Remove if off-screen
+        gameState.enemyBullets.splice(i, 1);
+        continue;
+      }
+
+      // Collision with player
+      if (checkCollision(bullet, gameState.player)) {
+        gameState.enemyBullets.splice(i, 1);
+        gameState.player.hp -= 50; // Player takes damage
+        hpFill.style.width = `${(gameState.player.hp / 1000) * 100}%`;
+      }
+    }
+
+    // Boss Updates
+    if (gameState.boss) {
+      gameState.boss.update(timestamp);
+      gameState.boss.draw();
+      bossHpFill.style.width = `${(gameState.boss.hp / gameState.boss.maxHp) * 100}%`;
+
+      // Collision with player
+      if (checkCollision(gameState.boss, gameState.player)) {
+        gameState.player.hp -= 200; // Player takes heavy damage
+        hpFill.style.width = `${(gameState.player.hp / 1000) * 100}%`;
+      }
+    } else {
+        // Hide boss HP bar if no boss is present or boss is defeated
+        bossHpFill.style.width = '0%';
+    }
+
+    // Explosion Updates (general explosions)
+    for (let i = gameState.explosions.length - 1; i >= 0; i--) {
+      const explosion = gameState.explosions[i];
+
+      if (explosion instanceof BossExplosion) {
+        explosion.update();
+        explosion.draw();
+        // BossExplosion only manages its own duration; debris are handled globally
+        if (explosion.isFinished()) {
+          // Keep BossExplosion object until its full duration is over, then remove
+          gameState.explosions.splice(i, 1);
+        }
+      } else { // Regular Explosion
+        explosion.update();
+        explosion.draw();
+        if (explosion.finished) {
+          gameState.explosions.splice(i, 1);
+        }
+      }
+    }
+
+    // Debris Updates (from boss explosion)
+    for (let i = gameState.debris.length - 1; i >= 0; i--) {
+      const debris = gameState.debris[i];
+      debris.update();
+      debris.draw();
+      if (debris.isFinished()) {
+        gameState.debris.splice(i, 1);
+      }
+    }
+
+    // Boss Transformation Initiation
+    if (gameState.boss && !gameState.boss.isTransformed && !gameState.isScreenFlashing && gameState.boss.hp <= gameState.boss.maxHp / 2) {
+      gameState.isScreenFlashing = true;
+      gameState.screenFlashStartTime = timestamp;
+      audio.danger.currentTime = 0;
+      audio.danger.play();
+    }
+
+    // Screen Flash Effect for Boss Transformation
+    if (gameState.isScreenFlashing) {
+      gameState.currentScreenFlashBlinkState = (timestamp % (2 * gameState.screenFlashBlinkInterval)) < gameState.screenFlashBlinkInterval;
+
+      if (timestamp - gameState.screenFlashStartTime >= gameState.screenFlashDuration) {
+        gameState.isScreenFlashing = false;
+        audio.danger.pause();
+        audio.danger.currentTime = 0;
+        if (gameState.boss && !gameState.boss.isTransformed) {
+          gameState.boss.transform(); // Trigger boss transformation after flash
+        }
+      }
+    }
+
+    // Victory Sequence (player exit & text blinking)
+    if (gameState.isVictory && !gameModalOverlay.classList.contains('active')) {
+      gameState.player.x += gameState.heroExitSpeed; // Player exits screen
+
+      // Victory text blinking effect
+      if (gameState.victoryTextActive) { // Only blink text if active
+        gameState.victoryText.alpha += gameState.victoryText.blinkDirection;
+        if (gameState.victoryText.alpha >= 1 || gameState.victoryText.alpha <= 0) {
+          gameState.victoryText.blinkDirection *= -1;
+        }
+      }
+    }
+
+    // Player Drawing (with screen flash effect)
+    // Draw player unless they are dead and exploding, or the game is completely finished
+    if (!gameState.player.exploding && !gameModalOverlay.classList.contains('active')) {
+        if (!gameState.isScreenFlashing || !gameState.currentScreenFlashBlinkState) {
+            drawPlayer();
+        }
+    }
+
+
+    // Screen Flash Overlay Effect
+    if (gameState.isScreenFlashing) {
+      if (gameState.currentScreenFlashBlinkState) {
+        ctx.fillStyle = 'rgba(255, 0, 0, 0.5)'; // Red transparent overlay
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+    }
+
+    // Game Over Check
+    if (gameState.player.hp <= 0 && !gameState.player.exploding) {
+      createExplosion(
+        gameState.player.x + gameState.player.width / 2,
+        gameState.player.y + gameState.player.height / 2,
+        true // Player death uses boss explosion effect for impact
+      );
+      gameState.player.exploding = true;
+      // Allow explosion to play before showing game over modal (23 seconds)
+      setTimeout(() => {
+        showGameModal("GAME OVER", gameState.score);
+      }, 3000); // Corresponds to BossExplosion duration
+    }
+
+    updateButtonVisibility(); // Update button states
+    requestAnimationFrame(gameLoop); // Continue the loop
+  }
+
+  // Event Listeners
+  function setupEventListeners() {
+    // Window Resize
+    window.addEventListener('resize', resizeCanvas);
+
+    // Rocket Button
+    rocketBtn.addEventListener('touchstart', e => {
+      e.preventDefault(); // Prevent default touch behavior
+      fireRocket();
+    });
+    rocketBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      fireRocket();
+    });
+
+    // Beam Button
+    beamBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      fireBeam();
+    });
+    beamBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      fireBeam();
+    });
+
+    // Fire Button (main attack)
+    fireBtn.addEventListener('touchstart', e => {
+      e.preventDefault();
+      if (!fireBtn.classList.contains('disabled')) {
+        gameState.keys.fire = true;
+      }
+    });
+    fireBtn.addEventListener('touchend', e => {
+      e.preventDefault();
+      gameState.keys.fire = false;
+    });
+    fireBtn.addEventListener('mousedown', e => {
+      e.preventDefault();
+      if (!fireBtn.classList.contains('disabled')) {
+        gameState.keys.fire = true;
+      }
+    });
+    fireBtn.addEventListener('mouseup', e => {
+      e.preventDefault();
+      gameState.keys.fire = false;
+    });
+
+    // Movement Buttons (Up/Down)
+    document.getElementById('up-btn').addEventListener('touchstart', e => {
+      e.preventDefault();
+      gameState.keys.up = true;
+    });
+    document.getElementById('up-btn').addEventListener('touchend', e => {
+      e.preventDefault();
+      gameState.keys.up = false;
+    });
+    document.getElementById('up-btn').addEventListener('mousedown', e => {
+      e.preventDefault();
+      gameState.keys.up = true;
+    });
+    document.getElementById('up-btn').addEventListener('mouseup', e => {
+      e.preventDefault();
+      gameState.keys.up = false;
+    });
+
+    document.getElementById('down-btn').addEventListener('touchstart', e => {
+      e.preventDefault();
+      gameState.keys.down = true;
+    });
+    document.getElementById('down-btn').addEventListener('touchend', e => {
+      e.preventDefault();
+      gameState.keys.down = false;
+    });
+    document.getElementById('down-btn').addEventListener('mousedown', e => {
+      e.preventDefault();
+      gameState.keys.down = true;
+    });
+    document.getElementById('down-btn').addEventListener('mouseup', e => {
+      e.preventDefault();
+      gameState.keys.down = false;
+    });
+
+    // Keyboard Controls
+    window.addEventListener('keydown', e => {
+      if (e.key === 'ArrowUp') gameState.keys.up = true;
+      if (e.key === 'ArrowDown') gameState.keys.down = true;
+      // Spacebar for normal fire
+      if ((e.key === ' ' || e.key === 'Spacebar') && !fireBtn.classList.contains('disabled')) {
+        gameState.keys.fire = true;
+      }
+      // 'r' for Rocket (added for keyboard)
+      if (e.key === 'r' && !rocketBtn.classList.contains('disabled')) {
+          fireRocket();
+      }
+      // 'b' for Beam (added for keyboard)
+      if (e.key === 'b' && gameState.boss && gameState.boss.hp < gameState.boss.maxHp * 0.3) {
+        fireBeam();
+      }
+    });
+
+    window.addEventListener('keyup', e => {
+      if (e.key === 'ArrowUp') gameState.keys.up = false;
+      if (e.key === 'ArrowDown') gameState.keys.down = false;
+      if (e.key === ' ' || e.key === 'Spacebar') gameState.keys.fire = false;
+    });
+
+    // Restart button in modal
+    modalRestartBtn.addEventListener('click', () => {
+      location.reload(); // Reload page to restart game
+    });
+  }
+
+  // Initialize Game
+  function initGame() {
+    resizeCanvas(); // Set initial canvas size
+    setupEventListeners(); // Setup all input listeners
+    gameState.player.y = canvas.height / 2 - gameState.player.height / 2; // Center player vertically
+    requestAnimationFrame(gameLoop); // Start the game loop
+  }
+
+  // Start the Game when window is fully loaded
+  window.onload = initGame;
+</script>
+</body>
+</html>
